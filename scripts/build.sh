@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 # Every file the extension loads at runtime. test/e2e-test.js --ext on the
 # unzipped build is the check that nothing is missing here.
-FILES="manifest.json hook.js bridge.js background.js parse.js popup.html popup.js offscreen.html offscreen.js"
+FILES="manifest.json hook.js bridge.js background.js parse.js popup.html popup.js offscreen.html offscreen.js icons/icon16.png icons/icon32.png icons/icon48.png icons/icon128.png"
 
 VERSION=$(node -p "require('./manifest.json').version")
 OUT="dist/instagram-dm-capture-v$VERSION.zip"

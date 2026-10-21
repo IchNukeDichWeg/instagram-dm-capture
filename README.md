@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="icons/icon128.png" alt="Instagram DM Capture icon" width="96" height="96">
+
 # Instagram DM Capture
 
 ### Export Instagram DMs to JSON, with photos and videos, straight from your browser
@@ -283,7 +285,7 @@ npx @puppeteer/browsers install chrome@stable --path ~/.cache/puppeteer
 
 `e2e-test.js --ext <dir>` tests an unpacked build instead of the source folder, and `--screenshots <dir>` regenerates the popup images in `docs/`. All fixtures are synthetic. Never commit a real captured chat.
 
-Releases are built from the committed tree with `scripts/build.sh`; see [RELEASING.md](RELEASING.md).
+Releases are built from the committed tree with `scripts/build.sh`; see [RELEASING.md](RELEASING.md). The icon source is `icons/icon.svg`; `node scripts/render-icons.js` regenerates the PNGs with headless Chrome.
 
 ## License
 

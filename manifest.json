@@ -5,7 +5,12 @@
   "description": "Capture Instagram DM messages from the page's own network traffic and export them as JSON.",
   "permissions": ["storage", "unlimitedStorage", "downloads", "offscreen"],
   "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "Instagram DM Capture" },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Instagram DM Capture",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
+  },
   "content_scripts": [
     {
       "matches": ["https://www.instagram.com/*"],
