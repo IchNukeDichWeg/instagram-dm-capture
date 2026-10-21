@@ -45,10 +45,11 @@ Instagram DM Capture records the messages the Instagram web app already loads wh
 ## Features
 
 - **Export an Instagram chat to JSON**, as far back as you scroll.
+- **Only the chat you have open**: Instagram preloads the latest messages of every chat in your inbox; those are skipped, and the popup shows how many.
 - **Download Instagram photos and videos from DMs**: optional, saved into a `media/` folder next to the JSON, with every message linking to its local file.
 - **Full message detail**: text, sender, timestamp, reactions, replies (with the quoted message), forwarded, pinned, unsent and edited flags.
 - **Participants list** with usernames, display names and profile pictures.
-- **Several chats in one capture**: open another conversation while capturing and it becomes its own thread in the file.
+- **Several chats in one capture, on purpose**: click into another conversation while capturing and it is added as its own thread in the file.
 - **Deduplicated and sorted** oldest to newest, however you scroll.
 - **Read-only and passive**: the extension never sends a request to Instagram. It only reads responses the page already received.
 - **Keeps going in the background**: closing the popup does not stop a capture or a save.
@@ -77,7 +78,7 @@ Built and tested for Google Chrome. Other Chromium browsers with Manifest V3 (Ed
 1. Open the conversation on [instagram.com/direct](https://www.instagram.com/direct/inbox/).
 2. Click the extension icon, then **Start capture**.
 3. **Refresh the page.**
-4. **Scroll up** in the chat. Every batch of older messages Instagram loads is captured; the popup shows the count and the oldest date reached.
+4. **Scroll up** in the chat. Every batch of older messages Instagram loads is captured; the popup shows the chat, the count and the oldest date reached. Messages Instagram preloads for your other chats are skipped.
 5. Tick **Save photos, videos & profile pictures locally** if you want the media too.
 6. Click **Finish & save JSON**.
 
@@ -176,8 +177,8 @@ flowchart LR
 ```
 
 - **`hook.js`** runs inside the page at `document_start` and wraps `fetch` and `XMLHttpRequest`. It reads only the GraphQL responses that contain chat messages (`slide_messages`). Requests pass through untouched.
-- **`bridge.js`** relays those responses to the extension. It also reads the first page of a chat, which Instagram often embeds in the HTML instead of fetching.
-- **`background.js`** merges everything into `chrome.storage.local`, deduplicated by message id, but only while a capture is running. On save it downloads media four at a time and writes the JSON.
+- **`bridge.js`** relays those responses to the extension together with the tab's current URL. It also reads the first page of a chat, which Instagram often embeds in the HTML instead of fetching.
+- **`background.js`** keeps only messages from the chat in the URL (`/direct/t/<id>/`) at the moment each response arrives, and merges them into `chrome.storage.local`, deduplicated by message id, only while a capture is running. On save it downloads media four at a time and writes the JSON.
 - **`parse.js`** holds all parsing and export logic. It searches any response shape for message lists, so it is not tied to one query name.
 
 ## Privacy
@@ -251,6 +252,7 @@ jq -r '.threads[].messages[] | "\(.time)  \(.sender_username): \(.text // "[" + 
 
 - Captures what the Instagram web app loads over GraphQL or embeds in the page. Messages that arrive **live** while the chat is open come over a websocket and are not captured; refresh and scroll again to include them.
 - If Instagram renames its internal `slide_messages` data or moves chats to another transport, the capture will show 0 messages and the parser needs an update. Please [open an issue](https://github.com/IchNukeDichWeg/instagram-dm-capture/issues) if that happens.
+- The open chat is found by matching the id in the tab's URL against the thread ids in Instagram's responses. If Instagram ever puts a different id in the URL, the popup shows 0 captured and everything as skipped; please open an issue if you see that.
 - Media detection takes any Instagram CDN URL inside a message's `content`. A message type that keeps its media URL elsewhere would be missed.
 - Media is downloaded without Instagram cookies. That works for Instagram's signed CDN links; a file that ever needs a login shows up as failed in the JSON.
 - Group chats and non-Chrome browsers are untested.
@@ -275,7 +277,7 @@ node test/e2e-test.js
 | --- | --- | --- |
 | `test.js` | Parsing, dedupe, export, media planning, background worker with a mocked `chrome` | < 1 s |
 | `hook-test.js` | `hook.js` in headless Google Chrome against a fake GraphQL endpoint: fetch and every XHR response type | ~1 s |
-| `e2e-test.js` | The real extension in Chrome for Testing, with `www.instagram.com` and a fake CDN mapped to a local HTTPS server: capture, media folder, a failing download, re-save, plain save | ~3 s |
+| `e2e-test.js` | The real extension in Chrome for Testing, with `www.instagram.com` and a fake CDN mapped to a local HTTPS server: capture, inbox preloads skipped, inbox page, switching chats, media folder, a failing download, re-save, plain save | ~3 s |
 
 The e2e test needs Chrome for Testing, because branded Chrome ignores `--load-extension`:
 

@@ -88,6 +88,49 @@ test('unrelated and garbage bodies are ignored', () => {
   assert.equal(s.responses, 0);
 });
 
+test('thread id from the tab URL', () => {
+  assert.equal(P.threadIdFromPath('/direct/t/112233445566778/'), '112233445566778');
+  assert.equal(P.threadIdFromPath('/direct/t/555'), '555');
+  assert.equal(P.threadIdFromPath('/direct/inbox/'), null);
+  assert.equal(P.threadIdFromPath('/someone/'), null);
+  assert.equal(P.threadIdFromPath(undefined), null);
+});
+
+test('open-chat filter keeps only that chat from an inbox preload', () => {
+  const s = P.emptyState();
+  P.ingest(s, JSON.stringify(F.page1), { thread: '555' });
+  assert.equal(P.ingest(s, JSON.stringify(F.preload), { thread: '555' }), 0, 'm4 already known, others skipped');
+  assert.deepEqual(Object.keys(s.messages).sort(), ['m3', 'm4']);
+  assert.deepEqual(s.skippedIds, { x1: '777', x2: '777', y1: '888' });
+  P.ingest(s, JSON.stringify(F.preload), { thread: '555' });
+  assert.equal(P.summarize(s).skipped, 3, 'the same preload on a refresh is not counted twice');
+  const sum = P.summarize(s);
+  assert.equal(sum.current, '555');
+  assert.deepEqual(sum.currentNames, ['alice_test', 'bob_test']);
+  assert.equal(sum.skippedChats, 2);
+});
+
+test('open-chat filter: no chat open keeps nothing, switching chats adds that chat', () => {
+  const s = P.emptyState();
+  assert.equal(P.ingest(s, JSON.stringify(F.preload), { thread: null }), 0);
+  assert.equal(P.summarize(s).skipped, 4);
+  assert.equal(s.responses, 0);
+  assert.equal(P.summarize(s).current, null);
+  assert.equal(P.ingest(s, JSON.stringify(F.preload), { thread: '777' }), 2);
+  assert.deepEqual(Object.keys(s.messages).sort(), ['x1', 'x2']);
+  const sum = P.summarize(s);
+  assert.equal(sum.skipped, 2, 'x1/x2 no longer skipped once their chat is open; m4 and y1 still are');
+  assert.equal(sum.skippedChats, 2);
+});
+
+test('open-chat filter matches the thread_fbid on the message too', () => {
+  // Container without an id: only the node's thread_fbid identifies the chat.
+  const s = P.emptyState();
+  const doc = structuredClone(F.page1);
+  delete doc.data.fetch__SlideThread.as_ig_direct_thread.id;
+  assert.equal(P.ingest(s, JSON.stringify(doc), { thread: '555' }), 2);
+});
+
 test('export is sorted oldest-first with participants and filename', () => {
   const s = P.emptyState();
   P.ingest(s, JSON.stringify(F.page1));
@@ -143,21 +186,26 @@ function loadBackground() {
 
 test('background: idle ignores traffic, start/capture/stop/export', async () => {
   const bg = loadBackground();
-  await bg.send({ type: 'capture', body: JSON.stringify(F.page1) });
+  await bg.send({ type: 'capture', page: '/direct/t/555/', body: JSON.stringify(F.page1) });
   assert.equal((await bg.send({ type: 'status' })).count, 0, 'not capturing yet');
 
   assert.equal((await bg.send({ type: 'start' })).capturing, true);
   // Fire both pages without awaiting: the queue must serialize the merges.
-  const a = bg.send({ type: 'capture', body: JSON.stringify(F.page1) });
-  const b = bg.send({ type: 'capture', body: JSON.stringify(F.page2) });
+  const a = bg.send({ type: 'capture', page: '/direct/t/555/', body: JSON.stringify(F.page1) });
+  const b = bg.send({ type: 'capture', page: '/direct/t/555/', body: JSON.stringify(F.page2) });
   await Promise.all([a, b]);
   const st = await bg.send({ type: 'status' });
   assert.equal(st.count, 4);
   assert.equal(st.responses, 2);
+  await bg.send({ type: 'capture', page: '/direct/t/555/', body: JSON.stringify(F.preload) });
+  const st2 = await bg.send({ type: 'status' });
+  assert.equal(st2.count, 4, 'preloads of other chats skipped');
+  assert.equal(st2.skipped, 3);
+  assert.equal(st2.current, '555');
   assert.equal(bg.store.summary.count, 4, 'summary persisted for the popup');
 
   assert.equal((await bg.send({ type: 'stop' })).capturing, false);
-  await bg.send({ type: 'capture', body: JSON.stringify(F.ssr) });
+  await bg.send({ type: 'capture', page: '/direct/t/555/', body: JSON.stringify(F.ssr) });
   assert.equal((await bg.send({ type: 'status' })).count, 4, 'stopped capture ignores traffic');
 
   const ex = await bg.send({ type: 'export' });
@@ -171,14 +219,14 @@ test('background: idle ignores traffic, start/capture/stop/export', async () => 
 test('background: state survives worker restart', async () => {
   const bg = loadBackground();
   await bg.send({ type: 'start' });
-  await bg.send({ type: 'capture', body: JSON.stringify(F.page1) });
+  await bg.send({ type: 'capture', page: '/direct/t/555/', body: JSON.stringify(F.page1) });
   // New worker instance over the same storage (service worker was suspended).
   const bg2 = loadBackground();
   Object.assign(bg2.store, bg.store);
   const st = await bg2.send({ type: 'status' });
   assert.equal(st.capturing, true);
   assert.equal(st.count, 2);
-  await bg2.send({ type: 'capture', body: JSON.stringify(F.page2) });
+  await bg2.send({ type: 'capture', page: '/direct/t/555/', body: JSON.stringify(F.page2) });
   assert.equal((await bg2.send({ type: 'status' })).count, 4);
 });
 

@@ -6,7 +6,9 @@
 
   function send(body) {
     try {
-      chrome.runtime.sendMessage({ type: 'capture', body }).catch(() => {});
+      // The page path decides which chat the body is kept for, so it is read
+      // when the body arrives, not when the capture started.
+      chrome.runtime.sendMessage({ type: 'capture', body, page: location.pathname }).catch(() => {});
     } catch (_) {
       // Extension reloaded while the tab stayed open: context is gone.
     }

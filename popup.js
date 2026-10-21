@@ -21,6 +21,11 @@ function render(s) {
   $('oldest').textContent = fmt(s.oldest);
   $('newest').textContent = fmt(s.newest);
   $('responses').textContent = s.responses || 0;
+  // Only the chat open in the tab is kept; everything Instagram preloads for
+  // the other chats in the inbox list is counted here instead.
+  $('chat').textContent = s.current ? (s.currentNames && s.currentNames.length ? '@' + s.currentNames.join(', @') : s.current) : '-';
+  $('chat').title = s.current || '';
+  $('skipped').textContent = s.skipped ? `${s.skipped} from ${s.skippedChats} other chat${s.skippedChats === 1 ? '' : 's'}` : '0';
   $('start').hidden = s.capturing || busy;
   $('finish').hidden = !s.capturing;
   $('again').hidden = s.capturing || !s.count;
@@ -40,8 +45,10 @@ function render(s) {
     const media = sv.media ? ` and ${sv.total - sv.failed} files` : '';
     const failed = sv.failed ? ` (${sv.failed} files failed, see "error" in the JSON)` : '';
     hint(`Saved ${(sv.count || 0).toLocaleString()} messages${media} to Downloads/${sv.path}${failed}`, !!sv.failed);
+  } else if (s.capturing && s.skipped && !s.current) {
+    hint('No chat open. Open the chat to capture; messages Instagram preloads for other chats are skipped.');
   } else if (s.capturing) {
-    hint('Refresh the Instagram chat, then scroll up to load older messages. Click Finish when you have enough.');
+    hint('Refresh the Instagram chat, then scroll up to load older messages. Only the chat open in the tab is captured. Click Finish when you have enough.');
   } else {
     hint(s.count ? '' : 'Open the chat on instagram.com, click Start, then refresh the page.');
   }

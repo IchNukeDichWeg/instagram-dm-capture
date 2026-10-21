@@ -19,6 +19,25 @@ function parseBodies(text) {
   return out;
 }
 
+// The chat open in the tab: instagram.com/direct/t/<id>/. Null on the inbox
+// or any other page.
+function threadIdFromPath(pathname) {
+  const m = /\/direct\/t\/([^/?#]+)/.exec(String(pathname || ''));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// Every id-like scalar on the object holding a thread's messages (`id`,
+// `thread_fbid`, `thread_key`, ...). The URL's chat id is matched against
+// this set rather than one assumed field name.
+function threadIdsOf(container) {
+  const ids = new Set();
+  for (const k in container) {
+    const v = container[k];
+    if ((typeof v === 'string' || typeof v === 'number') && /id|key/i.test(k)) ids.add(String(v));
+  }
+  return ids;
+}
+
 // Walk any JSON shape and yield every `slide_messages.edges` list with the id
 // of the object holding it (the thread). Generic on purpose: the same data
 // shows up under different query names and inside SSR `__bbox` wrappers.
@@ -34,7 +53,8 @@ function findMessageNodes(root) {
     }
     const sm = v.slide_messages;
     if (sm && Array.isArray(sm.edges)) {
-      for (const e of sm.edges) if (e && e.node) found.push({ node: e.node, threadId: v.id || null });
+      const threadIds = threadIdsOf(v);
+      for (const e of sm.edges) if (e && e.node) found.push({ node: e.node, threadId: v.id || null, threadIds });
     }
     for (const k in v) if (k !== 'slide_messages') stack.push(v[k]);
   }
@@ -96,18 +116,40 @@ function participantOf(node) {
 }
 
 function emptyState() {
-  return { messages: {}, participants: {}, responses: 0 };
+  return { messages: {}, participants: {}, responses: 0, skippedIds: {}, current: null, urlThreads: {} };
 }
 
 // Merge one response body into state in place. Returns how many messages
 // were new. Re-seen messages are overwritten so reaction/edit updates win.
-function ingest(state, text) {
+//
+// opts.thread filters to one chat: the id from the tab's /direct/t/<id>/ URL
+// when the response arrived. Instagram preloads ~20 messages of every chat in
+// the inbox list, and those must not end up in the capture. A null thread
+// (inbox, profile page, ...) keeps nothing. Without opts.thread nothing is
+// filtered.
+function ingest(state, text, opts = {}) {
+  const filter = 'thread' in opts;
+  const only = filter && opts.thread != null ? String(opts.thread) : null;
+  // id -> chat, so a preview seen again on every refresh is counted once.
+  state.skippedIds = state.skippedIds || {};
+  state.urlThreads = state.urlThreads || {};
+  if (filter) state.current = only;
   let added = 0;
   let hit = false;
   for (const doc of parseBodies(text)) {
-    for (const { node, threadId } of findMessageNodes(doc)) {
+    for (const { node, threadId, threadIds } of findMessageNodes(doc)) {
       const msg = normalizeMessage(node, threadId);
       if (!msg.id) continue;
+      if (filter) {
+        const ids = new Set(threadIds);
+        if (node.thread_fbid != null) ids.add(String(node.thread_fbid));
+        if (only === null || !ids.has(only)) {
+          if (!state.messages[msg.id]) state.skippedIds[msg.id] = msg.thread_id || '?';
+          continue;
+        }
+        state.urlThreads[only] = msg.thread_id;
+        delete state.skippedIds[msg.id];
+      }
       hit = true;
       if (!state.messages[msg.id]) added++;
       state.messages[msg.id] = msg;
@@ -129,7 +171,23 @@ function summarize(state) {
     if (oldest === null || m.timestamp_ms < oldest) oldest = m.timestamp_ms;
     if (newest === null || m.timestamp_ms > newest) newest = m.timestamp_ms;
   }
-  return { count: msgs.length, threads: threads.size, responses: state.responses, oldest, newest };
+  // The open chat as the popup shows it: usernames of whoever has written in
+  // it so far, or just its id before any of its messages arrived.
+  const current = state.current || null;
+  const key = current && state.urlThreads ? state.urlThreads[current] : null;
+  const names = new Set();
+  if (key) for (const m of msgs) if (m.thread_id === key && m.sender_username) names.add(m.sender_username);
+  return {
+    count: msgs.length,
+    threads: threads.size,
+    responses: state.responses,
+    oldest,
+    newest,
+    skipped: Object.keys(state.skippedIds || {}).length,
+    skippedChats: new Set(Object.values(state.skippedIds || {})).size,
+    current,
+    currentNames: [...names].sort(),
+  };
 }
 
 // Returns a detached copy: callers (attachMedia) annotate it, and that must
@@ -266,7 +324,7 @@ function resolveJob(job, rel, error) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    parseBodies, findMessageNodes, normalizeMessage, emptyState, ingest, summarize, buildExport, exportFilename,
+    parseBodies, threadIdFromPath, threadIdsOf, findMessageNodes, normalizeMessage, emptyState, ingest, summarize, buildExport, exportFilename,
     isMediaUrl, collectMediaUrls, mediaFileName, attachMedia, resolveJob,
   };
 }

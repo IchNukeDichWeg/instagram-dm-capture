@@ -184,9 +184,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     async capture() {
       const c = await load();
       if (!c.capturing) return;
-      const before = c.state.responses;
-      ingest(c.state, msg.body);
-      if (c.state.responses !== before) await persist();
+      const before = JSON.stringify(summarize(c.state));
+      ingest(c.state, msg.body, { thread: threadIdFromPath(msg.page) });
+      if (JSON.stringify(summarize(c.state)) !== before) await persist();
     },
     async start() {
       const c = await load();

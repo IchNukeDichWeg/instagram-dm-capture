@@ -39,7 +39,7 @@ function node(id, user, ts, text, extra = {}) {
   };
 }
 
-function page(nodes) {
+function page(nodes, threadId = '555') {
   return {
     data: {
       fetch__SlideThread: {
@@ -48,9 +48,9 @@ function page(nodes) {
             edges: nodes.map((n) => ({ node: n, cursor: 'c' + n.id })),
             page_info: { has_next_page: true, has_previous_page: true },
           },
-          id: '555',
+          id: threadId,
         },
-        id: '555',
+        id: threadId,
       },
     },
     extensions: { is_final: true },
@@ -103,7 +103,21 @@ const mediaPage = page([
 // SSR shape: same thread wrapped in a require/__bbox array inside a script tag.
 const ssr = { require: [['ScheduledServerJS', 'handle', null, [{ __bbox: { result: page([node('m0', 'b', 1792545000000, 'zero')]) } }]]] };
 
+// What the inbox does on load: one response carrying the newest messages of
+// several chats, including the open one (555, already in page1) and two
+// others the capture must skip.
+const other = (id, user, ts, text) => node(id, user, ts, text, { thread_fbid: id.startsWith('x') ? '777' : '888' });
+const preload = {
+  data: {
+    inbox: [
+      page([node('m4', 'a', 1792545134899, 'four')]).data.fetch__SlideThread,
+      page([other('x1', 'a', 1792545200000, 'other chat'), other('x2', 'b', 1792545100000, 'other chat 2')], '777').data.fetch__SlideThread,
+      page([other('y1', 'b', 1792545300000, 'third chat')], '888').data.fetch__SlideThread,
+    ],
+  },
+};
+
 // A graphql response that has nothing to do with DMs.
 const unrelated = { data: { xdt_feed: { edges: [{ node: { id: 'p1' } }] } } };
 
-module.exports = { CDN, users, page1, page2, mediaPage, ssr, unrelated };
+module.exports = { CDN, users, page1, page2, mediaPage, preload, ssr, unrelated };

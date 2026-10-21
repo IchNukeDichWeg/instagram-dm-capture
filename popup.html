@@ -15,6 +15,7 @@
     .stats { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
     .row { display: flex; justify-content: space-between; padding: 2px 0; }
     .row span:first-child { color: var(--muted); }
+    .val { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
     .big { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
     button { width: 100%; padding: 8px; margin-top: 6px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--fg); font: inherit; cursor: pointer; }
     button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
@@ -31,9 +32,11 @@
   <div class="stats">
     <div class="big" id="count">0</div>
     <div class="row"><span>messages captured</span><span id="threads"></span></div>
+    <div class="row"><span>open chat</span><span id="chat" class="val">-</span></div>
     <div class="row"><span>oldest</span><span id="oldest">-</span></div>
     <div class="row"><span>newest</span><span id="newest">-</span></div>
     <div class="row"><span>responses</span><span id="responses">0</span></div>
+    <div class="row"><span>skipped</span><span id="skipped">0</span></div>
   </div>
   <label class="opt"><input type="checkbox" id="media"> Save photos, videos &amp; profile pictures locally</label>
   <button id="start" class="primary">Start capture</button>

@@ -75,6 +75,7 @@ const igPage = `<!doctype html><title>loading</title>
 <script type="application/json">${ssrJson}</script>
 <script>
 (async () => {
+  await fetch('/api/graphql?p=4', { method: 'POST' }).then((r) => r.text()); // inbox preload of every chat
   await fetch('/api/graphql?p=1', { method: 'POST' }).then((r) => r.text());
   await new Promise((r) => { const x = new XMLHttpRequest(); x.open('POST', '/api/graphql?p=2'); x.onloadend = r; x.send(); });
   await fetch('/graphql/query?p=3', { method: 'POST' }).then((r) => r.text());
@@ -93,8 +94,8 @@ const server = https.createServer(
       res.setHeader('content-type', name.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg');
       return res.end('BYTES:' + name);
     }
-    if (u.pathname === '/direct/t/555/') return res.setHeader('content-type', 'text/html').end(igPage);
-    const body = { 1: F.page1, 2: F.page2, 3: F.mediaPage }[u.searchParams.get('p')] || F.unrelated;
+    if (u.pathname.startsWith('/direct/')) return res.setHeader('content-type', 'text/html').end(igPage);
+    const body = { 1: F.page1, 2: F.page2, 3: F.mediaPage, 4: F.preload }[u.searchParams.get('p')] || F.unrelated;
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify(body));
   }
@@ -200,8 +201,13 @@ async function main() {
       const s = await msg({ type: 'status' });
       return s.count === 7 && s;
     }, '7 captured messages (ssr m0 + pages m1..m6)');
-    assert.equal(st.responses, 4, 'ssr blob + 3 graphql responses');
+    assert.equal(st.responses, 5, 'ssr blob + 3 thread pages + the preload (it carries m4 of this chat)');
+    assert.equal(st.current, '555');
+    assert.deepEqual(st.currentNames, ['alice_test', 'bob_test']);
+    assert.equal(st.skipped, 3, 'preloaded messages of chats 777 and 888 skipped');
+    assert.equal(st.skippedChats, 2);
     console.log('ok   capture: hook + bridge + worker saw ssr, fetch, xhr, /graphql/query (7 messages)');
+    console.log('ok   open-chat filter: inbox preload of 2 other chats skipped (3 messages)');
 
     if (SHOTS) {
       fs.mkdirSync(SHOTS, { recursive: true });
@@ -218,6 +224,16 @@ async function main() {
       }
       await c.send('Emulation.clearDeviceMetricsOverride', {}, popup);
     }
+
+    // The inbox page itself (no chat open) adds nothing.
+    const inbox = await open('https://www.instagram.com/direct/inbox/');
+    await waitFor(() => evaluate(inbox, 'document.title === "done"'), 'inbox load');
+    await sleep(300);
+    const sti = await msg({ type: 'status' });
+    assert.equal(sti.count, 7, 'inbox page captures nothing');
+    assert.equal(sti.current, null);
+    await c.send('Target.closeTarget', { targetId: (await c.send('Target.getTargets')).targetInfos.find((t) => t.url.includes('/direct/inbox/')).targetId });
+    console.log('ok   open-chat filter: inbox page with no chat open captures nothing');
 
     // Save with media.
     await msg({ type: 'save', media: true });
@@ -269,6 +285,18 @@ async function main() {
     assert.equal(plain.threads[0].messages.find((m) => m.id === 'm2').media, undefined);
     assert.match(sv2.path, /^instagram-dm-alice_test_bob_test-\d{4}-\d{2}-\d{2}\.json$/);
     console.log('ok   plain save: ' + sv2.path);
+
+    // Switching chats in-app (pushState, no reload) captures the new chat:
+    // the filter follows the URL at the time each response arrives.
+    await msg({ type: 'start' });
+    await evaluate(idleTab, `history.pushState({}, '', '/direct/t/777/'); fetch('/api/graphql?p=4', { method: 'POST' }).then((r) => r.text())`);
+    const sw2 = await waitFor(async () => {
+      const s = await msg({ type: 'status' });
+      return s.count === 2 && s;
+    }, 'chat 777 after switching');
+    assert.equal(sw2.current, '777');
+    assert.equal(sw2.skipped, 2, 'm4 (555) and y1 (888) skipped');
+    console.log('ok   open-chat filter: switching to another chat captures that chat only');
 
     c.close();
   } finally {
