@@ -10,13 +10,20 @@ zip name and the release title are all derived from it.
 3. **Freeze.** `scripts/build.sh` builds `dist/instagram-dm-capture-vX.Y.Z.zip`
    from the committed tree. Verify the zip itself, not the source folder:
    unzip it to a scratch dir and run `node test/e2e-test.js --ext <dir>`.
-4. **Tag.** `git tag -a vX.Y.Z -m vX.Y.Z` on that commit, push `main` and
+4. **Scan.** `shasum -a 256 dist/instagram-dm-capture-vX.Y.Z.zip > dist/instagram-dm-capture-vX.Y.Z.zip.sha256`,
+   then upload that same zip on [virustotal.com](https://www.virustotal.com/gui/home/upload)
+   and wait for the analysis to finish. The VirusTotal page URL ends in the
+   zip's SHA-256; check that it matches the `.sha256` file. Never rebuild
+   after this step: a rebuilt zip has a different hash.
+5. **Tag.** `git tag -a vX.Y.Z -m vX.Y.Z` on that commit, push `main` and
    the tag.
-5. **Publish.** `gh release create vX.Y.Z dist/instagram-dm-capture-vX.Y.Z.zip
-   --title "vX.Y.Z" --notes-file <notes>`. Notes: bold one-line headline,
-   the fixed stats block, then short `###` sections for what this release
-   changed and its known limits.
-6. **Install locally.** Reload the extension in `chrome://extensions` so the
+6. **Publish.** `gh release create vX.Y.Z dist/instagram-dm-capture-vX.Y.Z.zip
+   dist/instagram-dm-capture-vX.Y.Z.zip.sha256 --title "vX.Y.Z" --notes-file <notes>`.
+   Notes: bold one-line headline, the fixed stats block, then short `###`
+   sections for what this release changed and its known limits. Then
+   download the asset back with `gh release download` and compare its hash
+   to the `.sha256` file.
+7. **Install locally.** Reload the extension in `chrome://extensions` so the
    copy in use matches what shipped.
 
 Stats block fields, in this order:
@@ -26,4 +33,6 @@ Version | X.Y.Z
 Tests   | <unit count> unit, hook, e2e: all passing
 Tested  | <Chrome versions> / live instagram.com: <yes/no>
 Zip     | <bytes> bytes, commit <short sha>
+SHA-256 | <zip sha256>
+VirusTotal | <detections>/<engines> engines, <VirusTotal URL>
 ```
