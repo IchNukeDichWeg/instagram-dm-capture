@@ -252,7 +252,7 @@ jq -r '.threads[].messages[] | "\(.time)  \(.sender_username): \(.text // "[" + 
 
 - Captures what the Instagram web app loads over GraphQL or embeds in the page. Messages that arrive **live** while the chat is open come over a websocket and are not captured; refresh and scroll again to include them.
 - If Instagram renames its internal `slide_messages` data or moves chats to another transport, the capture will show 0 messages and the parser needs an update. Please [open an issue](https://github.com/IchNukeDichWeg/instagram-dm-capture/issues) if that happens.
-- The open chat is found by matching the id in the tab's URL against the thread ids in Instagram's responses. If Instagram ever puts a different id in the URL, the popup shows 0 captured and everything as skipped; please open an issue if you see that.
+- The open chat is found by matching the id in the tab's URL against the thread ids in Instagram's responses (confirmed on live instagram.com, October 2026). If Instagram ever puts a different id in the URL, the popup shows 0 captured and everything as skipped; please open an issue if you see that.
 - Media detection takes any Instagram CDN URL inside a message's `content`. A message type that keeps its media URL elsewhere would be missed.
 - Media is downloaded without Instagram cookies. That works for Instagram's signed CDN links; a file that ever needs a login shows up as failed in the JSON.
 - Group chats and non-Chrome browsers are untested.
