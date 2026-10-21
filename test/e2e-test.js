@@ -1,4 +1,6 @@
-// node test/e2e-test.js  -- loads the real extension in Chrome for Testing,
+// node test/e2e-test.js [--ext DIR] [--screenshots DIR]
+//
+// Loads the real extension in Chrome for Testing,
 // points www.instagram.com and a fake CDN host at a local HTTPS server, then
 // drives start -> page load -> save (with and without media) and checks the
 // files that land on disk.
@@ -6,6 +8,11 @@
 // Branded Google Chrome ignores --load-extension, so this needs Chrome for
 // Testing; it uses the newest one in Puppeteer's cache
 // (npx @puppeteer/browsers install chrome@stable puts one there).
+//
+//   --ext DIR          test an unpacked build (e.g. the unzipped release zip)
+//                      instead of the source folder
+//   --screenshots DIR  write popup-light.png / popup-dark.png of the popup
+//                      mid-capture, as used in the README
 const assert = require('node:assert/strict');
 const https = require('node:https');
 const fs = require('node:fs');
@@ -13,9 +20,17 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
 const F = require('./fixture.js');
-const P = require('../parse.js');
 
-const EXT = path.resolve(__dirname, '..');
+function flag(name) {
+  const i = process.argv.indexOf(name);
+  if (i === -1) return null;
+  const v = process.argv[i + 1];
+  if (!v || v.startsWith('--')) throw new Error(name + ' needs a value');
+  return path.resolve(v);
+}
+const EXT = flag('--ext') || path.resolve(__dirname, '..');
+const SHOTS = flag('--screenshots');
+if (!fs.existsSync(path.join(EXT, 'manifest.json'))) throw new Error('no manifest.json in ' + EXT);
 const IG_URL = 'https://www.instagram.com/direct/t/555/';
 
 function findChrome() {
@@ -188,6 +203,22 @@ async function main() {
     assert.equal(st.responses, 4, 'ssr blob + 3 graphql responses');
     console.log('ok   capture: hook + bridge + worker saw ssr, fetch, xhr, /graphql/query (7 messages)');
 
+    if (SHOTS) {
+      fs.mkdirSync(SHOTS, { recursive: true });
+      await evaluate(popup, 'document.getElementById("media").checked = true');
+      const h = await evaluate(popup, 'document.documentElement.scrollHeight');
+      await c.send('Emulation.setDeviceMetricsOverride', { width: 298, height: h, deviceScaleFactor: 2, mobile: false }, popup);
+      for (const scheme of ['light', 'dark']) {
+        await c.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] }, popup);
+        await sleep(150);
+        const { data: png } = await c.send('Page.captureScreenshot', { format: 'png' }, popup);
+        const out = path.join(SHOTS, `popup-${scheme}.png`);
+        fs.writeFileSync(out, Buffer.from(png, 'base64'));
+        console.log('     screenshot: ' + out);
+      }
+      await c.send('Emulation.clearDeviceMetricsOverride', {}, popup);
+    }
+
     // Save with media.
     await msg({ type: 'save', media: true });
     const sv = await waitFor(async () => {
@@ -239,16 +270,6 @@ async function main() {
     assert.match(sv2.path, /^instagram-dm-alice_test_bob_test-\d{4}-\d{2}-\d{2}\.json$/);
     console.log('ok   plain save: ' + sv2.path);
 
-    // Screenshot the popup in its final state for a visual check.
-    await evaluate(popup, 'location.reload()');
-    await sleep(500);
-    await c.send('Emulation.setDeviceMetricsOverride', { width: 300, height: 380, deviceScaleFactor: 2, mobile: false }, popup);
-    const { data: png } = await c.send('Page.captureScreenshot', { format: 'png' }, popup);
-    const shot = process.argv[2];
-    if (shot) {
-      fs.writeFileSync(shot, Buffer.from(png, 'base64'));
-      console.log('     popup screenshot: ' + shot);
-    }
     c.close();
   } finally {
     chrome.kill();
