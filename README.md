@@ -147,7 +147,21 @@ node test/test.js
 node test/hook-test.js
 ```
 
-`test.js` covers parsing, dedupe, export and the background worker (with a
-mocked `chrome`). `hook-test.js` runs `hook.js` in headless Google Chrome
-against a local fake GraphQL endpoint and checks fetch plus every XHR
-response type. Fixtures are synthetic; never commit a real captured chat.
+```bash
+node test/e2e-test.js
+```
+
+`test.js` covers parsing, dedupe, export, media planning and the background
+worker (with a mocked `chrome`). `hook-test.js` runs `hook.js` in headless
+Google Chrome against a local fake GraphQL endpoint and checks fetch plus
+every XHR response type. `e2e-test.js` loads the real extension in Chrome
+for Testing (branded Chrome ignores `--load-extension`), maps
+`www.instagram.com` and a fake CDN host to a local HTTPS server, and checks
+capture, the media folder, a 404 file, re-save and plain save on disk. It
+takes ~3 s and uses the newest Chrome for Testing in Puppeteer's cache:
+
+```bash
+npx @puppeteer/browsers install chrome@stable --path ~/.cache/puppeteer
+```
+
+Fixtures are synthetic; never commit a real captured chat.
