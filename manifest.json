@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Instagram DM Capture",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Capture Instagram DM messages from the page's own network traffic and export them as JSON.",
-  "permissions": ["storage", "unlimitedStorage", "downloads"],
+  "permissions": ["storage", "unlimitedStorage", "downloads", "offscreen"],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "Instagram DM Capture" },
   "content_scripts": [

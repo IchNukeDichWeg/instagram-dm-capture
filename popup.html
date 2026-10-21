@@ -21,6 +21,9 @@
     button:disabled { opacity: .4; cursor: default; }
     .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; line-height: 1.4; }
     .err { color: var(--rec); }
+    .opt { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 6px; line-height: 1.35; cursor: pointer; }
+    .opt input { margin: 2px 0 0; }
+    progress { width: 100%; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -32,10 +35,12 @@
     <div class="row"><span>newest</span><span id="newest">-</span></div>
     <div class="row"><span>responses</span><span id="responses">0</span></div>
   </div>
+  <label class="opt"><input type="checkbox" id="media"> Save photos, videos &amp; profile pictures locally</label>
   <button id="start" class="primary">Start capture</button>
   <button id="finish" class="primary" hidden>Finish &amp; save JSON</button>
   <button id="again" hidden>Save JSON again</button>
   <button id="clear">Clear</button>
+  <progress id="bar" hidden></progress>
   <p class="hint" id="hint"></p>
   <script src="popup.js"></script>
 </body>

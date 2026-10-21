@@ -37,7 +37,36 @@ test('non-text content kept raw', () => {
   P.ingest(s, JSON.stringify(F.page2));
   assert.equal(s.messages.m2.type, 'IMAGE');
   assert.equal(s.messages.m2.text, null);
-  assert.equal(s.messages.m2.content.image_url, 'https://example.invalid/i.jpg');
+  assert.equal(s.messages.m2.content.image_versions2.candidates.length, 2);
+});
+
+test('media urls: CDN only, largest variant only', () => {
+  const s = P.emptyState();
+  P.ingest(s, JSON.stringify(F.page2));
+  const found = P.collectMediaUrls(s.messages.m2.content);
+  assert.deepEqual(found, [{ path: 'content.image_versions2.candidates[1].url', url: `${F.CDN}/img_m2.jpg?stp=s1080` }]);
+  assert.equal(P.isMediaUrl('https://example.com/x.jpg'), false);
+  assert.equal(P.isMediaUrl('https://evilcdninstagram.com/x.jpg'), false);
+  assert.equal(P.isMediaUrl('https://video.xx.fbcdn.net/v/x.mp4'), true);
+  assert.equal(P.mediaFileName(`${F.CDN}/vid_m5.mp4?efg=x`), 'vid_m5.mp4');
+  assert.match(P.mediaFileName('https://scontent.cdninstagram.com/'), /^file_[0-9a-f]+$/);
+});
+
+test('attachMedia plans deduped jobs and resolveJob fills paths', () => {
+  const s = P.emptyState();
+  for (const p of [F.page1, F.page2, F.mediaPage]) P.ingest(s, JSON.stringify(p));
+  const d = P.buildExport(s);
+  const jobs = P.attachMedia(d);
+  // 2 profile pics + img_m2 + vid_m5 + missing.jpg
+  assert.deepEqual(jobs.map((j) => j.rel).sort(), ['media/img_m2.jpg', 'media/missing.jpg', 'media/pic_alice_test.jpg', 'media/pic_bob_test.jpg', 'media/vid_m5.mp4']);
+  for (const j of jobs) P.resolveJob(j, j.name === 'missing.jpg' ? null : j.rel, j.name === 'missing.jpg' ? 'SERVER_BAD_CONTENT' : null);
+  const msgs = Object.fromEntries(d.threads[0].messages.map((m) => [m.id, m]));
+  assert.deepEqual(msgs.m2.media, [{ path: 'content.image_versions2.candidates[1].url', url: `${F.CDN}/img_m2.jpg?stp=s1080`, file: 'media/img_m2.jpg' }]);
+  assert.equal(msgs.m6.media[0].file, null);
+  assert.equal(msgs.m6.media[0].error, 'SERVER_BAD_CONTENT');
+  assert.equal(msgs.m1.media, undefined, 'text messages get no media field');
+  assert.ok(d.threads[0].participants.every((p) => p.profile_pic_file && p.profile_pic_file.startsWith('media/pic_')));
+  assert.equal(s.messages.m2.media, undefined, 'annotating the export must not touch stored state');
 });
 
 test('for(;;) prefix and newline-delimited multi-doc body', () => {
@@ -92,9 +121,13 @@ function loadBackground() {
           await new Promise((r) => setTimeout(r, 1)); // make writes interleave if unserialized
           Object.assign(store, structuredClone(obj));
         },
+        async remove(k) {
+          delete store[k];
+        },
       },
     },
     runtime: { onMessage: { addListener: (fn) => (listener = fn) } },
+    downloads: { onChanged: { addListener() {} } },
   };
   const ctx = { chrome, console, structuredClone, setTimeout };
   ctx.importScripts = (f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), ctx);

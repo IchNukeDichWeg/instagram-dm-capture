@@ -132,7 +132,10 @@ function summarize(state) {
   return { count: msgs.length, threads: threads.size, responses: state.responses, oldest, newest };
 }
 
+// Returns a detached copy: callers (attachMedia) annotate it, and that must
+// not leak back into the stored capture.
 function buildExport(state, exportedAt = new Date()) {
+  state = structuredClone(state);
   const byThread = new Map();
   for (const m of Object.values(state.messages)) {
     if (!byThread.has(m.thread_id)) byThread.set(m.thread_id, []);
@@ -175,6 +178,95 @@ function exportFilename(data) {
   return `instagram-dm-${names || data.threads[0].thread_id}-${date}.json`;
 }
 
+// Only Instagram/Facebook CDN hosts count as media. Shared-link messages also
+// carry plain web URLs, and those are pages, not files.
+const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net)$/;
+
+function isMediaUrl(s) {
+  if (typeof s !== 'string' || !/^https?:\/\//.test(s)) return false;
+  try {
+    return MEDIA_HOST.test(new URL(s).hostname);
+  } catch (_) {
+    return false;
+  }
+}
+
+// Every CDN URL inside a raw `content` object, with the JSON path it came
+// from. A list of sized variants of one asset ({url, width}, ...) is reduced
+// to its largest entry, so a photo is saved once, not once per resolution.
+function collectMediaUrls(value, path = 'content', out = []) {
+  if (typeof value === 'string') {
+    if (isMediaUrl(value)) out.push({ path, url: value });
+  } else if (Array.isArray(value)) {
+    const sized =
+      value.length > 1 &&
+      value.every((x) => x && typeof x === 'object' && typeof x.url === 'string' && Number.isFinite(Number(x.width)));
+    if (sized) {
+      let best = 0;
+      value.forEach((x, i) => {
+        if (Number(x.width) > Number(value[best].width)) best = i;
+      });
+      collectMediaUrls(value[best], `${path}[${best}]`, out);
+    } else {
+      value.forEach((x, i) => collectMediaUrls(x, `${path}[${i}]`, out));
+    }
+  } else if (value && typeof value === 'object') {
+    for (const k in value) collectMediaUrls(value[k], `${path}.${k}`, out);
+  }
+  return out;
+}
+
+// CDN basenames are unique per asset (sizes of one asset share a basename,
+// differing only in the `stp` query), so the basename is the dedupe key.
+function mediaFileName(url) {
+  let base = '';
+  try {
+    base = decodeURIComponent(new URL(url).pathname.split('/').pop() || '');
+  } catch (_) {}
+  base = base.replace(/[^A-Za-z0-9._-]/g, '_').slice(-120);
+  if (!base || base === '_') {
+    let h = 0;
+    for (const ch of url) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    base = 'file_' + h.toString(16);
+  }
+  return base;
+}
+
+// Annotate an export (from buildExport) with planned local paths and return
+// the download jobs. Each job lists the objects whose `file` field the
+// caller sets once the download's outcome is known.
+//   message.media = [{ path, url, file }]   participant.profile_pic_file
+function attachMedia(data, dir = 'media') {
+  const jobs = new Map();
+  const plan = (url, ref, key) => {
+    const name = mediaFileName(url);
+    if (!jobs.has(name)) jobs.set(name, { url, name, rel: `${dir}/${name}`, refs: [] });
+    jobs.get(name).refs.push({ obj: ref, key });
+  };
+  for (const t of data.threads) {
+    for (const p of t.participants) if (p.profile_pic_url) plan(p.profile_pic_url, p, 'profile_pic_file');
+    for (const m of t.messages) {
+      if (!m.content) continue;
+      const found = collectMediaUrls(m.content);
+      if (!found.length) continue;
+      m.media = found.map((f) => ({ path: f.path, url: f.url, file: null }));
+      m.media.forEach((entry) => plan(entry.url, entry, 'file'));
+    }
+  }
+  return [...jobs.values()];
+}
+
+// Write one job's outcome into every object that referenced it.
+function resolveJob(job, rel, error) {
+  for (const { obj, key } of job.refs) {
+    obj[key] = rel || null;
+    if (error) obj[key === 'file' ? 'error' : 'profile_pic_error'] = error;
+  }
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { parseBodies, findMessageNodes, normalizeMessage, emptyState, ingest, summarize, buildExport, exportFilename };
+  module.exports = {
+    parseBodies, findMessageNodes, normalizeMessage, emptyState, ingest, summarize, buildExport, exportFilename,
+    isMediaUrl, collectMediaUrls, mediaFileName, attachMedia, resolveJob,
+  };
 }

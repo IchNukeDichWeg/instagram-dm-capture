@@ -2,8 +2,9 @@
 
 Chrome extension (Manifest V3) that reads the Instagram web app's own
 GraphQL responses while you scroll a chat and exports the messages as JSON.
-It never sends requests itself and makes no network calls of its own;
-everything stays in the browser until you save the file.
+It never sends requests to Instagram itself; everything stays in the
+browser until you save. The only fetches it makes are the optional media
+downloads from Instagram's CDN when you save.
 
 ## Install
 
@@ -21,6 +22,26 @@ everything stays in the browser until you save the file.
 5. Click **Finish & save JSON**. The file goes to `~/Downloads` as
    `instagram-dm-<usernames>-<date>.json`. **Save JSON again** re-downloads
    the same capture; **Clear** discards it.
+
+### Saving media locally
+
+Tick **Save photos, videos & profile pictures locally** before saving
+(the setting is remembered). The save then becomes a folder:
+
+```
+~/Downloads/instagram-dm-<usernames>-<date>/
+  chat.json
+  media/
+    331068570_..._n.jpg
+    ...
+```
+
+Every message with media gets a `media` list, and every participant a
+`profile_pic_file`, holding paths relative to `chat.json`. The original URL
+stays next to each path. A file that fails to download keeps `file: null`
+plus an `error`; the popup shows how many failed. Downloads run in the
+background, so the popup can be closed while it saves. Saving again on the
+same day replaces that folder in place.
 
 The capture survives closing the popup, switching chats (each chat becomes
 its own thread in the file) and Chrome suspending the extension's worker.
@@ -70,7 +91,21 @@ its own thread in the file) and Chrome suspending the extension's worker.
 Messages are sorted oldest first and deduplicated by id. `time` is UTC.
 Non-text messages (photos, reels, voice, links) also carry the raw `content`
 object, since its shape differs per type. `profile_pic_url` and media URLs
-are signed CDN links that expire after a while.
+are signed CDN links that expire after a while, which is what the media
+option is for.
+
+With media saved, a photo message also has:
+
+```json
+"media": [
+  { "path": "content.image_versions2.candidates[0].url", "url": "https://scontent...", "file": "media/331068570_..._n.jpg" }
+]
+```
+
+`path` is where in `content` the URL was found. Only URLs on Instagram's
+CDN hosts (`*.cdninstagram.com`, `*.fbcdn.net`) count as media, and when
+`content` lists several sizes of one image only the largest is saved. The
+top level gains `media_file_count` and `media_failed_count`.
 
 ## How it works
 
@@ -81,7 +116,10 @@ are signed CDN links that expire after a while.
   load also scans inline `<script type="application/json">` blobs, because
   the first page of a thread can be server-rendered instead of fetched.
 - `background.js` merges each response into `chrome.storage.local` through
-  a single queue, only while a capture is running.
+  a single queue, only while a capture is running. On save it downloads
+  media 4 at a time, then writes the JSON through a blob URL made in
+  `offscreen.html` (a service worker can't make blob URLs, and `data:` URLs
+  cap at 2 MB).
 - `parse.js` holds all parsing and export logic. It walks any JSON shape for
   `slide_messages.edges`, so it is not tied to one query name.
 
@@ -93,7 +131,11 @@ are signed CDN links that expire after a while.
 - If Instagram renames `slide_messages` or moves DMs to another transport,
   the capture will show 0 and `parse.js` needs updating.
 - Tested against synthetic responses with the same shape as a real
-  `fetch__SlideThread` response, not against live instagram.com.
+  `fetch__SlideThread` response, not against live instagram.com. The
+  shape of photo/video/voice `content` objects is not known from a real
+  capture, so media detection is generic (any CDN URL in `content`).
+- Media URLs are fetched without Instagram cookies. Signed CDN URLs normally
+  don't need them; if some do, those files show up as failed.
 
 ## Tests
 

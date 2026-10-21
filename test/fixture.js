@@ -1,6 +1,10 @@
 // Synthetic responses in the shape of Instagram's fetch__SlideThread query.
 // All names/ids are made up; never put a real captured chat in here.
 
+// Media lives on a fake *.cdninstagram.com host; the e2e test resolves it to
+// its local server.
+const CDN = 'https://scontent-test.cdninstagram.com/v';
+
 const users = {
   a: { fbid: '1001', igid: '2001', username: 'alice_test', name: 'Alice' },
   b: { fbid: '1002', igid: '2002', username: 'bob_test', name: 'Bob' },
@@ -26,7 +30,7 @@ function node(id, user, ts, text, extra = {}) {
       name: u.name,
       id: u.fbid,
       igid: u.igid,
-      user_dict: { profile_pic_url: 'https://example.invalid/p.jpg', username: u.username, full_name: u.name, id: u.igid },
+      user_dict: { profile_pic_url: `${CDN}/pic_${u.username}.jpg?stp=s206x206`, username: u.username, full_name: u.name, id: u.igid },
     },
     slide_edit_history: [],
     is_pinned: false,
@@ -68,9 +72,32 @@ const page2 = page([
   node('m2', 'a', 1792545101347, null, {
     content_type: 'IMAGE',
     text_body: null,
-    content: { __typename: 'SlideMessageImage', image_url: 'https://example.invalid/i.jpg' },
+    content: {
+      __typename: 'SlideMessageImage',
+      image_versions2: {
+        candidates: [
+          { url: `${CDN}/img_m2.jpg?stp=s320`, width: 320, height: 320 },
+          { url: `${CDN}/img_m2.jpg?stp=s1080`, width: 1080, height: 1080 },
+        ],
+      },
+      link_url: 'https://example.com/not-media',
+    },
   }),
   node('m1', 'a', 1792545087708, 'one'),
+]);
+
+// One video that downloads and one image the CDN answers 404 for.
+const mediaPage = page([
+  node('m6', 'b', 1792544990000, null, {
+    content_type: 'IMAGE',
+    text_body: null,
+    content: { __typename: 'SlideMessageImage', image_versions2: { candidates: [{ url: `${CDN}/missing.jpg`, width: 640 }] } },
+  }),
+  node('m5', 'a', 1792544980000, null, {
+    content_type: 'VIDEO',
+    text_body: null,
+    content: { __typename: 'SlideMessageVideo', video_url: `${CDN}/vid_m5.mp4?efg=x` },
+  }),
 ]);
 
 // SSR shape: same thread wrapped in a require/__bbox array inside a script tag.
@@ -79,4 +106,4 @@ const ssr = { require: [['ScheduledServerJS', 'handle', null, [{ __bbox: { resul
 // A graphql response that has nothing to do with DMs.
 const unrelated = { data: { xdt_feed: { edges: [{ node: { id: 'p1' } }] } } };
 
-module.exports = { users, page1, page2, ssr, unrelated };
+module.exports = { CDN, users, page1, page2, mediaPage, ssr, unrelated };
