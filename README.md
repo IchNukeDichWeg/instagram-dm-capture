@@ -130,12 +130,12 @@ top level gains `media_file_count` and `media_failed_count`.
   are not captured; refresh and scroll again to pick them up.
 - If Instagram renames `slide_messages` or moves DMs to another transport,
   the capture will show 0 and `parse.js` needs updating.
-- Tested against synthetic responses with the same shape as a real
-  `fetch__SlideThread` response, not against live instagram.com. The
-  shape of photo/video/voice `content` objects is not known from a real
-  capture, so media detection is generic (any CDN URL in `content`).
-- Media URLs are fetched without Instagram cookies. Signed CDN URLs normally
-  don't need them; if some do, those files show up as failed.
+- Confirmed working on live instagram.com (capture and media save,
+  2026-10-22). Media detection is still generic (any CDN URL in `content`)
+  rather than tied to a known shape per message type, so a type that puts
+  its URL outside `content` would be missed.
+- Media URLs are fetched without Instagram cookies. That worked on the live
+  test; a file that ever needs them shows up as failed.
 
 ## Tests
 
