@@ -162,7 +162,9 @@ function buildExport(state, exportedAt = new Date()) {
 }
 
 function exportFilename(data) {
-  const date = data.exported_at.slice(0, 10);
+  // Local calendar date, so a late-night export is named for the day it was made.
+  const d = new Date(data.exported_at);
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   if (data.threads.length !== 1) return `instagram-dm-${data.threads.length}threads-${date}.json`;
   const names = data.threads[0].participants
     .map((p) => p.username || p.id)
