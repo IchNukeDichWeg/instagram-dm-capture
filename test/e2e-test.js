@@ -300,10 +300,18 @@ async function main() {
 
     c.close();
   } finally {
+    // Wait for Chrome to actually exit: it keeps writing its profile for a
+    // moment after the signal, which made the cleanup throw ENOTEMPTY and
+    // that error replaced the real test result. Cleanup can't fail the run.
+    const exited = new Promise((r) => chrome.once('exit', r));
     chrome.kill();
+    await Promise.race([exited, sleep(5000)]);
     server.close();
-    await sleep(300);
-    fs.rmSync(tmp, { recursive: true, force: true });
+    try {
+      fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch (e) {
+      console.log('     (temp dir not removed: ' + e.code + ')');
+    }
   }
 }
 
